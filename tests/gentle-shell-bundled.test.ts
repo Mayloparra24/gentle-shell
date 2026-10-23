@@ -16,6 +16,7 @@ import {
 	bundledUpdatePlan,
 	parseBundledUpgradeArgs,
 	withBundledNpmCommand,
+	withoutNpmCommand,
 	resolveBundledInstall,
 	setBundledInstallForTesting,
 	type BundledFs,
@@ -172,6 +173,19 @@ test("withBundledNpmCommand sets only npmCommand and leaves an already bundled s
 	assert.deepEqual(JSON.parse(replaced.status === "write" ? replaced.text : "{}"), { npmCommand: command });
 	assert.deepEqual(JSON.parse((withBundledNpmCommand(undefined, command) as { text: string }).text), { npmCommand: command });
 	for (const malformed of ["{", "[]", "null"]) assert.deepEqual(withBundledNpmCommand(malformed, command), { status: "malformed" });
+});
+
+test("withoutNpmCommand drops only an npmCommand whose program the caller rejects, keeping the rest of the file", () => {
+	const missing = "C:\gone\node.exe";
+	const gone = (program: string) => program === missing;
+	const text = `${JSON.stringify({ theme: "dark", npmCommand: [missing, "npm"], packages: ["npm:x"] }, null, "\t")}\n`;
+	assert.equal(withoutNpmCommand(text, gone), `${JSON.stringify({ theme: "dark", packages: ["npm:x"] }, null, "\t")}\n`);
+	assert.equal(withoutNpmCommand(JSON.stringify({ npmCommand: [missing] }), gone), "{}");
+	// A program the caller keeps, no npmCommand, or a file that is not a JSON object: nothing to write.
+	for (const kept of [JSON.stringify({ npmCommand: ["npm"] }), JSON.stringify({ npmCommand: missing }), '{"theme":"dark"}', "{", "[]", "null"]) {
+		assert.equal(withoutNpmCommand(kept, gone), undefined, kept);
+	}
+	assert.equal(withoutNpmCommand(undefined, gone), undefined);
 });
 
 test("bundledUpdatePlan redirects Pi's own update and keeps the extension updates", () => {

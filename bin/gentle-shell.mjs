@@ -26,7 +26,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { constants as osConstants, homedir, tmpdir } from "node:os";
-import { delimiter, dirname, join, resolve as resolvePath } from "node:path";
+import { delimiter, dirname, isAbsolute, join, resolve as resolvePath } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
@@ -95,6 +95,7 @@ import {
 	parseBundledUpgradeArgs,
 	resolveBundledInstall,
 	withBundledNpmCommand,
+	withoutNpmCommand,
 } from "../runtime/gentle-shell-bundled.mjs";
 import {
 	parseResumeHandoff,
@@ -1789,6 +1790,24 @@ async function ensureBundledNpmCommand(bundled, home, homeHadContentBeforeBootst
 	}
 }
 
+// Outside a bundled install, an `npmCommand` whose program is an absolute path
+// that no longer exists, such as the bundled node a self-uninstall removed
+// (#2469), is dropped from a home Gentle Shell owns, so Pi uses the npm on PATH.
+function dropMissingNpmCommand(home, homeHadContentBeforeBootstrap) {
+	if (home.mode === "link") return;
+	const previous = provisionedEntry(readRawConfig(resolveConfigPath()), safeRealpath(home.dir));
+	if (homeIsForeign(home, previous, homeHadContentBeforeBootstrap) || !isDirectory(home.dir)) return;
+	const settingsPath = join(home.dir, "settings.json");
+	let missing;
+	const text = withoutNpmCommand(readJsonIfExists(settingsPath), (program) => {
+		missing = program;
+		return isAbsolute(program) && !existsSync(program);
+	});
+	if (text === undefined) return;
+	writeFileAtomically(settingsPath, text);
+	process.stderr.write(`gentle-shell: removed npmCommand from ${settingsPath}: ${missing} does not exist, so Pi's package installs use the npm on your PATH\n`);
+}
+
 // `gentle-shell self-uninstall` in a bundled install (S6, S7): the prefix's own
 // folders and exactly the PATH entry its receipt records; on Windows the running
 // node.exe and launcher are removed by a detached process after this one exits.
@@ -2045,6 +2064,12 @@ async function main() {
 			await ensureBundledNpmCommand(bundled, home, homeHadContentBeforeBootstrap);
 		} catch (error) {
 			process.stderr.write(`gentle-shell: could not give Pi the bundled npm in ${join(home.dir, "settings.json")} (${error.message}); continuing\n`);
+		}
+	} else {
+		try {
+			dropMissingNpmCommand(home, homeHadContentBeforeBootstrap);
+		} catch (error) {
+			process.stderr.write(`gentle-shell: could not check npmCommand in ${join(home.dir, "settings.json")} (${error.message}); continuing\n`);
 		}
 	}
 

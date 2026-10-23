@@ -492,6 +492,18 @@ export function withBundledNpmCommand(settingsText                    , command 
 	return { status: "write", text: settingsText === undefined || settingsText.endsWith("\n") ? `${serialized}\n` : serialized };
 }
 
+// The agent home's settings.json without its `npmCommand` when `drop` rejects the
+// program it runs, every other key, the indentation and the final newline kept;
+// undefined when there is nothing to drop or the file is not a JSON object.
+export function withoutNpmCommand(settingsText                    , drop                              )                     {
+	const settings = settingsText === undefined ? undefined : parseJson(settingsText);
+	if (typeof settings !== "object" || settings === null || Array.isArray(settings)) return undefined;
+	const { npmCommand, ...rest } = settings;
+	if (!Array.isArray(npmCommand) || typeof npmCommand[0] !== "string" || !drop(npmCommand[0])) return undefined;
+	const serialized = JSON.stringify(rest, null, settingsText .match(/\{\r?\n([ \t]+)/)?.[1] ?? "  ");
+	return settingsText .endsWith("\n") ? `${serialized}\n` : serialized;
+}
+
 
 
 

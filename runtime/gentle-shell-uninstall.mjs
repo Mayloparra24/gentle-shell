@@ -2,6 +2,7 @@
 import { lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { withoutNpmCommand } from "./gentle-shell-bundled.mjs";
 import { isolatedDir, launcherConfigPath, parseRawLauncherConfig, provisionedEntry, userPiHome } from "./gentle-shell-launcher.mjs";
 
 // `gentle-shell self-uninstall`: removes what Gentle Shell itself created, then
@@ -637,23 +638,6 @@ const BUNDLED_PROFILE_MARK = "# gentle-shell bundled install";
 
 
 
-// settings.json without an `npmCommand` whose program lies inside `root`, every other
-// key, the indentation and the final newline kept; undefined when there is nothing to drop.
-function withoutBundledNpmCommand(text                    , root        , platform        )                     {
-	let settings         ;
-	try {
-		settings = text === undefined ? undefined : JSON.parse(text);
-	} catch {
-		return undefined;
-	}
-	if (typeof settings !== "object" || settings === null || Array.isArray(settings)) return undefined;
-	const { npmCommand, ...rest } = settings                           ;
-	const program = Array.isArray(npmCommand) ? npmCommand[0] : undefined;
-	if (typeof program !== "string" || !isAbsolute(program) || !within(root, program, platform)) return undefined;
-	const serialized = JSON.stringify(rest, null, text .match(/\{\r?\n([ \t]+)/)?.[1] ?? "  ");
-	return text .endsWith("\n") ? `${serialized}\n` : serialized;
-}
-
 function planBundledSelfUninstall(input                           )              {
 	const { env, homedir, platform, root } = input;
 	const windows = platform === "win32";
@@ -712,7 +696,7 @@ function planBundledSelfUninstall(input                           )             
 	consider(join(shellHome, "config.json"), "the launcher's settings", "file", plan.shared);
 	const settingsPath = join(shellHome, "agent", "settings.json");
 	const settingsText = plan.shared.some((removal) => removal.kind === "dir") && inspect(settingsPath, "file") === "ok"
-		? withoutBundledNpmCommand(readText(settingsPath), root, platform) : undefined;
+		? withoutNpmCommand(readText(settingsPath), (program) => isAbsolute(program) && within(root, program, platform)) : undefined;
 	if (settingsText !== undefined) plan.npmCommand = { path: settingsPath, text: settingsText };
 	const known = new Set([...BUNDLED_OWN.map((item) => item.name), ...(windows ? [BUNDLED_WINDOWS_MARKER.name] : []),
 		...(same(canonical(shellHome), real) ? ["agent", "config.json"] : [])]);

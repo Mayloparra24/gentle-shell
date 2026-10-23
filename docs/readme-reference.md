@@ -557,7 +557,9 @@ every `update` form that updates Pi itself explains that and runs
 extension part of an "all" form, and every package update, still reaches Pi.
 In a bundled install Pi and the agent's commands keep your own environment;
 Pi installs packages with Gentle Shell's npm through the `npmCommand` setting
-of its own home. Details: [Bundled install](bundled-install.md#launcher-in-a-bundled-install).
+of its own home. Outside a bundled install, the launcher drops an `npmCommand`
+whose program is an absolute path that no longer exists from a home it owns, and
+says so once, so Pi uses the npm on your PATH. Details: [Bundled install](bundled-install.md#launcher-in-a-bundled-install).
 The browser installation wizard offers the same main channel; see
 [Installation wizard](install-wizard.md#main-channel).
 
