@@ -491,14 +491,24 @@ export function withBundledNpmCommand(settingsText: string | undefined, command:
 	return { status: "write", text: settingsText === undefined || settingsText.endsWith("\n") ? `${serialized}\n` : serialized };
 }
 
-// The agent home's settings.json without its `npmCommand` when `drop` rejects the
-// program it runs, every other key, the indentation and the final newline kept;
+// An npmCommand a bundled install wrote (scripts/bundled-install.mjs bundledNpmCommand,
+// with npm-cli.js and --prefix in earlier releases): our node in runtime/node-<v>,
+// then npm's settings and cache flags, never a command the user chose.
+export function isBundledNpmCommand(command: readonly unknown[]): boolean {
+	const [node] = command;
+	return typeof node === "string" && /[\\/]runtime[\\/]node-[^\\/]+[\\/](node\.exe|bin[\\/]node)$/.test(node)
+		&& ["--userconfig=", "--globalconfig=", "--cache="].every((flag) => command.some((part) => typeof part === "string" && part.startsWith(flag)))
+		&& command[command.length - 1] === "--update-notifier=false";
+}
+
+// The agent home's settings.json without its `npmCommand` when `drop` rejects that
+// command, every other key, the indentation and the final newline kept;
 // undefined when there is nothing to drop or the file is not a JSON object.
-export function withoutNpmCommand(settingsText: string | undefined, drop: (program: string) => boolean): string | undefined {
+export function withoutNpmCommand(settingsText: string | undefined, drop: (command: string[]) => boolean): string | undefined {
 	const settings = settingsText === undefined ? undefined : parseJson(settingsText);
 	if (typeof settings !== "object" || settings === null || Array.isArray(settings)) return undefined;
 	const { npmCommand, ...rest } = settings;
-	if (!Array.isArray(npmCommand) || typeof npmCommand[0] !== "string" || !drop(npmCommand[0])) return undefined;
+	if (!Array.isArray(npmCommand) || typeof npmCommand[0] !== "string" || !drop(npmCommand)) return undefined;
 	const serialized = JSON.stringify(rest, null, settingsText!.match(/\{\r?\n([ \t]+)/)?.[1] ?? "  ");
 	return settingsText!.endsWith("\n") ? `${serialized}\n` : serialized;
 }

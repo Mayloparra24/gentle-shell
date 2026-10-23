@@ -96,6 +96,7 @@ import {
 	resolveBundledInstall,
 	withBundledNpmCommand,
 	withoutNpmCommand,
+	isBundledNpmCommand,
 } from "../runtime/gentle-shell-bundled.mjs";
 import {
 	parseResumeHandoff,
@@ -1790,18 +1791,18 @@ async function ensureBundledNpmCommand(bundled, home, homeHadContentBeforeBootst
 	}
 }
 
-// Outside a bundled install, an `npmCommand` whose program is an absolute path
-// that no longer exists, such as the bundled node a self-uninstall removed
-// (#2469), is dropped from a home Gentle Shell owns, so Pi uses the npm on PATH.
+// Outside a bundled install, the `npmCommand` a bundled install wrote is dropped
+// from a home Gentle Shell owns once its node no longer exists, such as after a
+// self-uninstall (#2469), so Pi uses the npm on PATH. A user's command is never touched.
 function dropMissingNpmCommand(home, homeHadContentBeforeBootstrap) {
 	if (home.mode === "link") return;
 	const previous = provisionedEntry(readRawConfig(resolveConfigPath()), safeRealpath(home.dir));
 	if (homeIsForeign(home, previous, homeHadContentBeforeBootstrap) || !isDirectory(home.dir)) return;
 	const settingsPath = join(home.dir, "settings.json");
 	let missing;
-	const text = withoutNpmCommand(readJsonIfExists(settingsPath), (program) => {
-		missing = program;
-		return isAbsolute(program) && !existsSync(program);
+	const text = withoutNpmCommand(readJsonIfExists(settingsPath), (command) => {
+		missing = command[0];
+		return isBundledNpmCommand(command) && isAbsolute(missing) && !existsSync(missing);
 	});
 	if (text === undefined) return;
 	writeFileAtomically(settingsPath, text);

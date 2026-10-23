@@ -695,7 +695,7 @@ function planBundledSelfUninstall(input: BundledSelfUninstallInput): BundledPlan
 	consider(join(shellHome, "config.json"), "the launcher's settings", "file", plan.shared);
 	const settingsPath = join(shellHome, "agent", "settings.json");
 	const settingsText = plan.shared.some((removal) => removal.kind === "dir") && inspect(settingsPath, "file") === "ok"
-		? withoutNpmCommand(readText(settingsPath), (program) => isAbsolute(program) && within(root, program, platform)) : undefined;
+		? withoutNpmCommand(readText(settingsPath), ([program]) => isAbsolute(program) && within(root, program, platform)) : undefined;
 	if (settingsText !== undefined) plan.npmCommand = { path: settingsPath, text: settingsText };
 	const known = new Set([...BUNDLED_OWN.map((item) => item.name), ...(windows ? [BUNDLED_WINDOWS_MARKER.name] : []),
 		...(same(canonical(shellHome), real) ? ["agent", "config.json"] : [])]);

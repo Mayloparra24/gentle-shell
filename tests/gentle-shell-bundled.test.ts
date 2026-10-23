@@ -17,12 +17,14 @@ import {
 	parseBundledUpgradeArgs,
 	withBundledNpmCommand,
 	withoutNpmCommand,
+	isBundledNpmCommand,
 	resolveBundledInstall,
 	setBundledInstallForTesting,
 	type BundledFs,
 	type BundledPi,
 } from "../lib/gentle-shell-bundled.ts";
 import { artifactFor, engramPinVersion } from "../scripts/installer-downloads.mjs";
+import { bundledNpmCommand, prefixLayout } from "../scripts/bundled-install.mjs";
 import { gentlePiConfigHome } from "../lib/agent-home.ts";
 import { resolveBackgroundSubagentsPolicy } from "../lib/background-subagents-policy.ts";
 
@@ -176,8 +178,8 @@ test("withBundledNpmCommand sets only npmCommand and leaves an already bundled s
 });
 
 test("withoutNpmCommand drops only an npmCommand whose program the caller rejects, keeping the rest of the file", () => {
-	const missing = "C:\gone\node.exe";
-	const gone = (program: string) => program === missing;
+	const missing = "C:\\gone\\node.exe";
+	const gone = (command: string[]) => command[0] === missing;
 	const text = `${JSON.stringify({ theme: "dark", npmCommand: [missing, "npm"], packages: ["npm:x"] }, null, "\t")}\n`;
 	assert.equal(withoutNpmCommand(text, gone), `${JSON.stringify({ theme: "dark", packages: ["npm:x"] }, null, "\t")}\n`);
 	assert.equal(withoutNpmCommand(JSON.stringify({ npmCommand: [missing] }), gone), "{}");
@@ -186,6 +188,22 @@ test("withoutNpmCommand drops only an npmCommand whose program the caller reject
 		assert.equal(withoutNpmCommand(kept, gone), undefined, kept);
 	}
 	assert.equal(withoutNpmCommand(undefined, gone), undefined);
+});
+
+test("isBundledNpmCommand recognizes only the npmCommand a bundled install writes, in every released form", () => {
+	const win = "C:\\Users\\ana\\AppData\\Local\\gentle-shell";
+	const posix = "/home/ana/.gentle-shell";
+	const flags = (root: string, sep: string) => [`--userconfig=${root}${sep}pnpm${sep}config${sep}npmrc`, `--globalconfig=${root}${sep}npm${sep}npmrc`, `--cache=${root}${sep}npm${sep}cache`];
+	// What the installer writes today on each platform, and its two released forms.
+	assert.equal(isBundledNpmCommand(bundledNpmCommand(prefixLayout({ platform: "win32", home: "C:\\Users\\ana", root: win }))), true);
+	assert.equal(isBundledNpmCommand(bundledNpmCommand(prefixLayout({ platform: "darwin", home: "/home/ana" }))), true);
+	assert.equal(isBundledNpmCommand([`${win}\\runtime\\node-24.21.0\\node.exe`, `${win}\\runtime\\node-24.21.0\\gentle-shell\\npm`, ...flags(win, "\\"), "--update-notifier=false"]), true);
+	assert.equal(isBundledNpmCommand([`${posix}/runtime/node-24.21.0/bin/node`, `${posix}/runtime/node-24.21.0/lib/node_modules/npm/bin/npm-cli.js`, ...flags(posix, "/"), `--prefix=${posix}/npm/prefix`, "--update-notifier=false"]), true);
+	// What a user writes is never ours, even with a missing program.
+	for (const command of [["npm"], ["C:\\tools\\node.exe", "C:\\tools\\npm-cli.js"], [`${win}\\runtime\\node-24.21.0\\node.exe`, "npm-cli.js"],
+		["/opt/runtime/node-20.0.0/bin/node", "/opt/npm-cli.js", "--update-notifier=false"]]) {
+		assert.equal(isBundledNpmCommand(command), false, JSON.stringify(command));
+	}
 });
 
 test("bundledUpdatePlan redirects Pi's own update and keeps the extension updates", () => {
