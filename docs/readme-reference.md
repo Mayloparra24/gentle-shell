@@ -579,7 +579,8 @@ when empty. Like `upgrade`, it runs before any Pi runtime check.
   refused before anything is removed.
 - From the bundled launcher it removes the bundled install instead: the PATH
   entry its receipt records, then the prefix's own folders; your Gentle Shell
-  home stays unless you accept or pass `--include-shared`. Details:
+  home stays unless you accept or pass `--include-shared`, without the
+  `npmCommand` that ran the bundled npm. Details:
   [Bundled install](bundled-install.md#self-uninstall).
 
 `gentle-shell uninstall <source>` stays Pi's own alias for `remove`. Details,

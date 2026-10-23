@@ -1006,3 +1006,33 @@ test("the gentle-ai folder next to a custom GENTLE_SHELL_HOME is kept: it may no
 		assert.ok(section(w.out, "Kept:").some((line) => line.includes(sibling)), w.out.join("\n"));
 	} finally { w.cleanup(); }
 });
+
+test("bundled: a kept Gentle Shell home loses only the npmCommand that runs the removed bundled npm", async () => {
+	const settingsOf = (w: BundledWorld) => join(w.shared.agent, "settings.json");
+	const ours = (w: BundledWorld) => [w.node, join(w.prefix, "runtime", "node-24.21.0", "gentle-shell", "npm"), "--update-notifier=false"];
+	const kept = bundledWorld({ platform: "win32" });
+	try {
+		write(settingsOf(kept), `${JSON.stringify({ theme: "dark", npmCommand: ours(kept), packages: ["npm:x"] }, null, "\t")}\n`);
+		assert.equal(await kept.uninstall([], { interactive: true, answers: ["y", "n"] }), 0, kept.err.join("\n"));
+		assert.equal(readFileSync(settingsOf(kept), "utf8"), `${JSON.stringify({ theme: "dark", packages: ["npm:x"] }, null, "\t")}\n`);
+		assert.match(section(kept.out, "Your Gentle Shell home").join("\n"), /npmCommand/);
+		assert.equal(existsSync(join(kept.shared.agent, "auth.json")), true);
+	} finally { kept.cleanup(); }
+	// A command the user chose, or a file that is not a JSON object, is left byte for byte.
+	for (const text of [`${JSON.stringify({ npmCommand: ["C:\tools\node.exe", "npm-cli.js"] })}\n`, "not json", "[1]"]) {
+		const w = bundledWorld({ platform: "win32" });
+		try {
+			write(settingsOf(w), text);
+			assert.equal(await w.uninstall(["--yes"]), 0, w.err.join("\n"));
+			assert.equal(readFileSync(settingsOf(w), "utf8"), text);
+			assert.doesNotMatch(w.out.join("\n"), /npmCommand/);
+		} finally { w.cleanup(); }
+	}
+	// Removing the home still removes it, settings.json included.
+	const removed = bundledWorld({ platform: "win32" });
+	try {
+		write(settingsOf(removed), `${JSON.stringify({ npmCommand: ours(removed) })}\n`);
+		assert.equal(await removed.uninstall(["--yes", "--include-shared"]), 0, removed.err.join("\n"));
+		assert.equal(existsSync(removed.shared.agent), false);
+	} finally { removed.cleanup(); }
+});
