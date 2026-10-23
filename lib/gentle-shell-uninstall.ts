@@ -1,7 +1,6 @@
-import { lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmdirSync, rmSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { writeJsonFileAtomicallySync } from "./agent-profiles.ts";
 import { isolatedDir, launcherConfigPath, parseRawLauncherConfig, provisionedEntry, userPiHome } from "./gentle-shell-launcher.ts";
 
 // `gentle-shell self-uninstall`: removes what Gentle Shell itself created, then
@@ -835,7 +834,14 @@ export async function runBundledSelfUninstall(input: BundledSelfUninstallInput):
 	// Pi would otherwise run the deleted bundled node for every package install (#2469).
 	if (plan.npmCommand && !confirmation.includeShared) {
 		try {
-			writeJsonFileAtomicallySync(plan.npmCommand.path, plan.npmCommand.text);
+			// One rename, so an interrupted write never leaves a truncated settings.json.
+			const temporary = `${plan.npmCommand.path}.${process.pid}.tmp`;
+			try {
+				writeFileSync(temporary, plan.npmCommand.text);
+				renameSync(temporary, plan.npmCommand.path);
+			} finally {
+				rmSync(temporary, { force: true });
+			}
 		} catch (error) {
 			err(`gentle-shell self-uninstall: could not remove npmCommand from ${plan.npmCommand.path}: ${error instanceof Error ? error.message : String(error)}`);
 			err("Nothing else was removed; fix the cause and run gentle-shell self-uninstall again.");
